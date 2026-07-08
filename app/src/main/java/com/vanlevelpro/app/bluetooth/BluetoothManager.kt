@@ -9,10 +9,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-class BluetoothManager(private val context: Context)
-{
-    companion object
-    {
+class BluetoothManager(private val context: Context) {
+
+    companion object {
         const val DEVICE_NAME = "VanLevel Pro"
     }
 
@@ -27,7 +26,13 @@ class BluetoothManager(private val context: Context)
         get() = bluetoothManager.adapter
 
     //--------------------------------------------------
-    // Connection State
+    // Scanner
+    //--------------------------------------------------
+
+    private var scanner: BleScanner? = null
+
+    //--------------------------------------------------
+    // State
     //--------------------------------------------------
 
     private val _connectionState =
@@ -36,9 +41,11 @@ class BluetoothManager(private val context: Context)
     val connectionState: StateFlow<ConnectionState> =
         _connectionState.asStateFlow()
 
-    //--------------------------------------------------
-    // Telemetry
-    //--------------------------------------------------
+    private val _status =
+        MutableStateFlow("Idle")
+
+    val status: StateFlow<String> =
+        _status.asStateFlow()
 
     private val _telemetry =
         MutableStateFlow(Telemetry())
@@ -47,26 +54,61 @@ class BluetoothManager(private val context: Context)
         _telemetry.asStateFlow()
 
     //--------------------------------------------------
-    // Public Functions
+    // Scan
     //--------------------------------------------------
 
-    fun scan()
-    {
+    fun scan() {
+
+        if (adapter == null) {
+            _status.value = "Bluetooth not supported"
+            return
+        }
+
+        if (!adapter!!.isEnabled) {
+            _status.value = "Bluetooth is OFF"
+            return
+        }
+
         _connectionState.value = ConnectionState.SCANNING
+        _status.value = "Scanning..."
+
+        scanner = BleScanner(adapter!!) { deviceName ->
+
+            _status.value = "Found: $deviceName"
+
+            scanner?.stop()
+        }
+
+        scanner?.start()
     }
 
-    fun connect()
-    {
+    //--------------------------------------------------
+    // Connect
+    //--------------------------------------------------
+
+    fun connect() {
+
         _connectionState.value = ConnectionState.CONNECTING
+        _status.value = "Connecting..."
     }
 
-    fun disconnect()
-    {
+    //--------------------------------------------------
+    // Disconnect
+    //--------------------------------------------------
+
+    fun disconnect() {
+
+        scanner?.stop()
+
         _connectionState.value = ConnectionState.DISCONNECTED
+        _status.value = "Disconnected"
     }
 
-    fun send(json: String)
-    {
-        // BLE write coming next
+    //--------------------------------------------------
+    // Send
+    //--------------------------------------------------
+
+    fun send(json: String) {
+        // Next milestone
     }
 }
