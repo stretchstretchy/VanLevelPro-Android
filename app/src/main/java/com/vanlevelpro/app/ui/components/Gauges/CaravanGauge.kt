@@ -22,6 +22,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.Path
 
 @Composable
 fun CaravanGauge(
@@ -116,23 +117,50 @@ fun CaravanGauge(
                 center.y + sin(pointerAngle).toFloat() * (radius + 4.dp.toPx())
             )
 
-            val pointerOuter = Offset(
-                center.x + cos(pointerAngle).toFloat() * (radius + 32.dp.toPx()),
-                center.y + sin(pointerAngle).toFloat() * (radius + 32.dp.toPx())
+            val triangleLength = 20.dp.toPx()
+            val triangleWidth = 7.dp.toPx()
+
+            val angleRad = pointerAngle.toFloat()
+
+// Base of the triangle
+            val pointerBase = Offset(
+                center.x + cos(pointerAngle).toFloat() * (radius + 10.dp.toPx()),
+                center.y + sin(pointerAngle).toFloat() * (radius + 10.dp.toPx())
             )
 
+// Tip of the triangle
+            val tip = Offset(
+                center.x + cos(pointerAngle).toFloat() * (radius + 30.dp.toPx()),
+                center.y + sin(pointerAngle).toFloat() * (radius + 30.dp.toPx())
+            )
+
+// Draw the pointer line to the base only
             drawLine(
                 color = pointerColour,
                 start = pointerInner,
-                end = pointerOuter,
+                end = pointerBase,
                 strokeWidth = 6.dp.toPx(),
                 cap = StrokeCap.Round
             )
 
-            drawCircle(
-                color = pointerColour,
-                radius = 6.dp.toPx(),
-                center = pointerOuter
+            val left = Offset(
+                pointerBase.x - sin(angleRad) * triangleWidth,
+                pointerBase.y + cos(angleRad) * triangleWidth
+            )
+
+            val right = Offset(
+                pointerBase.x + sin(angleRad) * triangleWidth,
+                pointerBase.y - cos(angleRad) * triangleWidth
+            )
+
+            drawPath(
+                Path().apply {
+                    moveTo(tip.x, tip.y)
+                    lineTo(left.x, left.y)
+                    lineTo(right.x, right.y)
+                    close()
+                },
+                color = pointerColour
             )
         }
 
