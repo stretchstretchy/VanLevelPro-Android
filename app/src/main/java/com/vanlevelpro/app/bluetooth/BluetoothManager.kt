@@ -124,7 +124,9 @@ class BluetoothManager(private val context: Context) {
 
             onTelemetry = { json ->
 
+                _status.value = json
                 parseTelemetry(json)
+
             }
         )
 

@@ -76,6 +76,16 @@ fun MainScreen(
 
             Spacer(Modifier.height(12.dp))
 
+            Text(
+                text = "Pitch: ${"%.1f".format(pitch)}°",
+                style = MaterialTheme.typography.bodyLarge
+            )
+
+            Text(
+                text = "Roll: ${"%.1f".format(roll)}°",
+                style = MaterialTheme.typography.bodyLarge
+            )
+
             CaravanGauge(
                 angle = roll,
                 imageRes = R.drawable.caravan_front,
@@ -101,6 +111,7 @@ fun MainScreen(
                 imageRes = R.drawable.caravan_side,
                 modifier = Modifier.size(370.dp)
             )
+
 
             Spacer(modifier = Modifier.weight(1f))
 

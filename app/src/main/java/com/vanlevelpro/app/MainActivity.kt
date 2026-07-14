@@ -31,6 +31,8 @@ class MainActivity : ComponentActivity() {
 
         requestPermissions()
 
+        viewModel.scan()
+
         setContent {
 
             val status by viewModel.status.collectAsStateWithLifecycle()
