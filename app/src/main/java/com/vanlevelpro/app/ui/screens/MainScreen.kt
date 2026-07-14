@@ -1,20 +1,18 @@
 package com.vanlevelpro.app.ui.screens
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.vanlevelpro.app.R
+import com.vanlevelpro.app.ui.components.gauges.CaravanGauge
+import kotlin.math.abs
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     status: String,
@@ -22,68 +20,102 @@ fun MainScreen(
     roll: Float,
     onScan: () -> Unit
 ) {
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
-    ) {
+
+    val connected =
+        status.contains("Connected", true) ||
+                status.contains("Notification", true)
+
+    val level =
+        abs(pitch) < 0.5f &&
+                abs(roll) < 0.5f
+
+    Scaffold(
+
+        topBar = {
+
+            CenterAlignedTopAppBar(
+
+                title = {
+
+                    Text(
+                        "VanLevel Pro",
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+
+                actions = {
+
+                    Text(
+                        if (connected) "🟢" else "⚪",
+                        style = MaterialTheme.typography.titleLarge
+                    )
+
+                    Spacer(Modifier.width(12.dp))
+                }
+            )
+        }
+
+    ) { padding ->
 
         Column(
+
             modifier = Modifier
                 .fillMaxSize()
+                .padding(padding)
                 .padding(16.dp),
-            verticalArrangement = Arrangement.Top
+
+            horizontalAlignment = Alignment.CenterHorizontally
+
         ) {
 
             Text(
-                text = "VanLevel Pro Dev",
-                style = MaterialTheme.typography.headlineMedium
+                "FRONT",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
             )
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(Modifier.height(12.dp))
 
-            Card {
+            CaravanGauge(
+                angle = roll,
+                imageRes = R.drawable.caravan_front,
+                modifier = Modifier.size(300.dp)
+            )
 
-                Column(modifier = Modifier.padding(16.dp)) {
+            Spacer(Modifier.height(24.dp))
 
-                    Text("Status")
+            HorizontalDivider()
 
-                    Text(status)
-                }
-            }
+            Spacer(Modifier.height(24.dp))
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                "SIDE",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
 
-            Card {
+            Spacer(Modifier.height(12.dp))
 
-                Column(modifier = Modifier.padding(16.dp)) {
+            CaravanGauge(
+                angle = pitch,
+                imageRes = R.drawable.caravan_side,
+                modifier = Modifier.size(370.dp)
+            )
 
-                    Text("Pitch : %.1f°".format(pitch))
+            Spacer(modifier = Modifier.weight(1f))
 
-                    Text("Roll  : %.1f°".format(roll))
-                }
-            }
+            Text(
+                text = if (level) "LEVEL" else "LEVELLING",
+                color =
+                    if (level)
+                        Color(0xFF4CAF50)
+                    else
+                        Color(0xFFFFB300),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Button(
-                onClick = onScan
-            ) {
-                Text("Scan")
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Card {
-
-                Column(modifier = Modifier.padding(16.dp)) {
-
-                    Text("Log")
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Text("Waiting...")
-                }
-            }
+            Spacer(Modifier.height(20.dp))
         }
     }
 }
