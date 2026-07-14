@@ -7,61 +7,80 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.vanlevelpro.app.bluetooth.BluetoothManager
 import com.vanlevelpro.app.ui.screens.MainScreen
 import com.vanlevelpro.app.ui.theme.VanLevelProTheme
 
 class MainActivity : ComponentActivity() {
 
-    private val bluetoothPermissionLauncher =
+    private lateinit var bluetoothManager: BluetoothManager
+
+    private val permissionLauncher =
         registerForActivityResult(
             ActivityResultContracts.RequestMultiplePermissions()
-        ) { permissions ->
-
-            // We'll use the result in the next step.
-        }
+        ) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         enableEdgeToEdge()
 
-        requestBluetoothPermissions()
+        bluetoothManager = BluetoothManager(this)
+
+        requestPermissions()
 
         setContent {
+
+            val status by bluetoothManager.status.collectAsStateWithLifecycle()
+            val telemetry by bluetoothManager.telemetry.collectAsStateWithLifecycle()
+
             VanLevelProTheme {
+
                 MainScreen(
-                    status = "Disconnected",
-                    pitch = 0f,
-                    roll = 0f,
-                    onScan = { }
+                    status = status,
+                    pitch = telemetry.pitch,
+                    roll = telemetry.roll,
+                    onScan = {
+                        bluetoothManager.scan()
+                    }
                 )
             }
         }
     }
 
-    private fun requestBluetoothPermissions() {
+    private fun requestPermissions() {
 
-        val scanGranted =
-            ContextCompat.checkSelfPermission(
+        val permissions = mutableListOf<String>()
+
+        if (ContextCompat.checkSelfPermission(
                 this,
                 Manifest.permission.BLUETOOTH_SCAN
-            ) == PackageManager.PERMISSION_GRANTED
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            permissions.add(Manifest.permission.BLUETOOTH_SCAN)
+        }
 
-        val connectGranted =
-            ContextCompat.checkSelfPermission(
+        if (ContextCompat.checkSelfPermission(
                 this,
                 Manifest.permission.BLUETOOTH_CONNECT
-            ) == PackageManager.PERMISSION_GRANTED
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            permissions.add(Manifest.permission.BLUETOOTH_CONNECT)
+        }
 
-        if (!scanGranted || !connectGranted) {
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
 
-            bluetoothPermissionLauncher.launch(
-                arrayOf(
-                    Manifest.permission.BLUETOOTH_SCAN,
-                    Manifest.permission.BLUETOOTH_CONNECT
-                )
-            )
+        if (permissions.isNotEmpty()) {
+            permissionLauncher.launch(permissions.toTypedArray())
         }
     }
 }

@@ -1,7 +1,7 @@
 package com.vanlevelpro.app.bluetooth
 
 import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothDevice
 import android.content.Context
 import com.vanlevelpro.app.model.ConnectionState
 import com.vanlevelpro.app.model.Telemetry
@@ -19,11 +19,11 @@ class BluetoothManager(private val context: Context) {
     // Android Bluetooth
     //--------------------------------------------------
 
-    private val bluetoothManager =
-        context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+    private val systemBluetoothManager =
+        context.getSystemService(Context.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager
 
     private val adapter: BluetoothAdapter?
-        get() = bluetoothManager.adapter
+        get() = systemBluetoothManager.adapter
 
     //--------------------------------------------------
     // Scanner
@@ -42,7 +42,7 @@ class BluetoothManager(private val context: Context) {
         _connectionState.asStateFlow()
 
     private val _status =
-        MutableStateFlow("Idle")
+        MutableStateFlow("Disconnected")
 
     val status: StateFlow<String> =
         _status.asStateFlow()
@@ -59,25 +59,41 @@ class BluetoothManager(private val context: Context) {
 
     fun scan() {
 
-        if (adapter == null) {
+        val bluetoothAdapter = adapter
+
+        if (bluetoothAdapter == null) {
             _status.value = "Bluetooth not supported"
             return
         }
 
-        if (!adapter!!.isEnabled) {
+        if (!bluetoothAdapter.isEnabled) {
             _status.value = "Bluetooth is OFF"
             return
         }
 
         _connectionState.value = ConnectionState.SCANNING
-        _status.value = "Scanning..."
 
-        scanner = BleScanner(adapter!!) { deviceName ->
+        scanner?.stop()
 
-            _status.value = "Found: $deviceName"
+        scanner = BleScanner(
 
-            scanner?.stop()
-        }
+            adapter = bluetoothAdapter,
+
+            onDeviceFound = { device: BluetoothDevice ->
+
+                scanner?.stop()
+
+                _connectionState.value = ConnectionState.CONNECTING
+
+                _status.value =
+                    "Found:\n${device.name ?: "VanLevel Pro"}"
+            },
+
+            onStatus = { message ->
+
+                _status.value = message
+            }
+        )
 
         scanner?.start()
     }
@@ -109,6 +125,7 @@ class BluetoothManager(private val context: Context) {
     //--------------------------------------------------
 
     fun send(json: String) {
+
         // Next milestone
     }
 }
