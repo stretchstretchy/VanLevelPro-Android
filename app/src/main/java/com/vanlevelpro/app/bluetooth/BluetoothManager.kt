@@ -8,6 +8,7 @@ import com.vanlevelpro.app.model.Telemetry
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import org.json.JSONObject
 
 class BluetoothManager(private val context: Context) {
 
@@ -26,10 +27,11 @@ class BluetoothManager(private val context: Context) {
         get() = systemBluetoothManager.adapter
 
     //--------------------------------------------------
-    // Scanner
+    // Scanner / Connection
     //--------------------------------------------------
 
     private var scanner: BleScanner? = null
+    private var connection: BleConnection? = null
 
     //--------------------------------------------------
     // State
@@ -71,9 +73,9 @@ class BluetoothManager(private val context: Context) {
             return
         }
 
-        _connectionState.value = ConnectionState.SCANNING
-
         scanner?.stop()
+
+        _connectionState.value = ConnectionState.SCANNING
 
         scanner = BleScanner(
 
@@ -83,10 +85,7 @@ class BluetoothManager(private val context: Context) {
 
                 scanner?.stop()
 
-                _connectionState.value = ConnectionState.CONNECTING
-
-                _status.value =
-                    "Found:\n${device.name ?: "VanLevel Pro"}"
+                connect(device)
             },
 
             onStatus = { message ->
@@ -102,10 +101,62 @@ class BluetoothManager(private val context: Context) {
     // Connect
     //--------------------------------------------------
 
-    fun connect() {
+    private fun connect(device: BluetoothDevice) {
 
         _connectionState.value = ConnectionState.CONNECTING
-        _status.value = "Connecting..."
+
+        connection?.disconnect()
+
+        connection = BleConnection(
+
+            context = context,
+
+            device = device,
+
+            onStatus = { message ->
+
+                _status.value = message
+
+                if (message == "Connected") {
+                    _connectionState.value = ConnectionState.CONNECTED
+                }
+            },
+
+            onTelemetry = { json ->
+
+                parseTelemetry(json)
+            }
+        )
+
+        connection?.connect()
+    }
+
+    //--------------------------------------------------
+    // Parse JSON
+    //--------------------------------------------------
+
+    private fun parseTelemetry(json: String) {
+
+        try {
+
+            val obj = JSONObject(json)
+
+            if (obj.optString("type") != "telemetry")
+                return
+
+            _telemetry.value = Telemetry(
+
+                pitch = obj.optDouble("pitch", 0.0).toFloat(),
+
+                roll = obj.optDouble("roll", 0.0).toFloat(),
+
+                connected = true
+            )
+
+        } catch (e: Exception) {
+
+            _status.value = json
+        }
     }
 
     //--------------------------------------------------
@@ -116,7 +167,12 @@ class BluetoothManager(private val context: Context) {
 
         scanner?.stop()
 
+        connection?.disconnect()
+
         _connectionState.value = ConnectionState.DISCONNECTED
+
+        _telemetry.value = Telemetry()
+
         _status.value = "Disconnected"
     }
 
