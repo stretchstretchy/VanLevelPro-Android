@@ -7,16 +7,17 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.vanlevelpro.app.bluetooth.BluetoothManager
 import com.vanlevelpro.app.ui.screens.MainScreen
 import com.vanlevelpro.app.ui.theme.VanLevelProTheme
+import com.vanlevelpro.app.viewmodel.MainViewModel
 
 class MainActivity : ComponentActivity() {
 
-    private lateinit var bluetoothManager: BluetoothManager
+    private val viewModel: MainViewModel by viewModels()
 
     private val permissionLauncher =
         registerForActivityResult(
@@ -28,14 +29,12 @@ class MainActivity : ComponentActivity() {
 
         enableEdgeToEdge()
 
-        bluetoothManager = BluetoothManager(this)
-
         requestPermissions()
 
         setContent {
 
-            val status by bluetoothManager.status.collectAsStateWithLifecycle()
-            val telemetry by bluetoothManager.telemetry.collectAsStateWithLifecycle()
+            val status by viewModel.status.collectAsStateWithLifecycle()
+            val telemetry by viewModel.telemetry.collectAsStateWithLifecycle()
 
             VanLevelProTheme {
 
@@ -44,7 +43,7 @@ class MainActivity : ComponentActivity() {
                     pitch = telemetry.pitch,
                     roll = telemetry.roll,
                     onScan = {
-                        bluetoothManager.scan()
+                        viewModel.scan()
                     }
                 )
             }

@@ -1,31 +1,38 @@
 package com.vanlevelpro.app.viewmodel
 
 import android.app.Application
-import android.bluetooth.BluetoothManager
 import androidx.lifecycle.AndroidViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import androidx.lifecycle.viewModelScope
+import com.vanlevelpro.app.bluetooth.BluetoothManager
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 
-class MainViewModel(application: Application) : AndroidViewModel(application)
-{
+class MainViewModel(
+    application: Application
+) : AndroidViewModel(application) {
+
     private val bluetoothManager =
-        application.getSystemService(BluetoothManager::class.java)
+        BluetoothManager(application)
 
-    private val _status = MutableStateFlow("Checking Bluetooth...")
+    val status =
+        bluetoothManager.status.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            bluetoothManager.status.value
+        )
 
-    val status: StateFlow<String> = _status.asStateFlow()
+    val telemetry =
+        bluetoothManager.telemetry.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            bluetoothManager.telemetry.value
+        )
 
-    init
-    {
-        val adapter = bluetoothManager.adapter
+    fun scan() {
+        bluetoothManager.scan()
+    }
 
-        _status.value =
-            if (adapter == null)
-                "Bluetooth Not Supported"
-            else if (!adapter.isEnabled)
-                "Bluetooth Off"
-            else
-                "Bluetooth Ready"
+    fun disconnect() {
+        bluetoothManager.disconnect()
     }
 }
