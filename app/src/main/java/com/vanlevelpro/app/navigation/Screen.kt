@@ -1,39 +1,27 @@
 package com.vanlevelpro.app.navigation
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.ui.graphics.vector.ImageVector
-
 sealed class Screen(
     val route: String,
-    val title: String,
-    val icon: ImageVector
+    val title: String
 ) {
 
-    object Dashboard : Screen(
-        "dashboard",
-        "Dashboard",
-        Icons.Default.Home
+    object Level : Screen(
+        route = "level",
+        title = "Level"
     )
 
     object Calibration : Screen(
-        "calibration",
-        "Calibration",
-        Icons.Default.Info
+        route = "calibration",
+        title = "Calibration"
     )
 
     object Diagnostics : Screen(
-        "diagnostics",
-        "Diagnostics",
-        Icons.Default.Build
+        route = "diagnostics",
+        title = "Diagnostics"
     )
 
     object Settings : Screen(
-        "settings",
-        "Settings",
-        Icons.Default.Settings
+        route = "settings",
+        title = "Settings"
     )
 }

@@ -8,10 +8,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.vanlevelpro.app.navigation.AppNavigation
+import com.vanlevelpro.app.navigation.DrawerMenu
 import com.vanlevelpro.app.ui.theme.VanLevelProTheme
 import com.vanlevelpro.app.viewmodel.MainViewModel
 
@@ -35,13 +33,12 @@ class MainActivity : ComponentActivity() {
 
         setContent {
 
-            val status by viewModel.status.collectAsStateWithLifecycle()
-            val telemetry by viewModel.telemetry.collectAsStateWithLifecycle()
-
             VanLevelProTheme {
-                AppNavigation()
+
+                DrawerMenu()
+
             }
-        }   // <-- This brace was missing
+        }
     }
 
     private fun requestPermissions() {
@@ -76,7 +73,9 @@ class MainActivity : ComponentActivity() {
         }
 
         if (permissions.isNotEmpty()) {
-            permissionLauncher.launch(permissions.toTypedArray())
+            permissionLauncher.launch(
+                permissions.toTypedArray()
+            )
         }
     }
 }

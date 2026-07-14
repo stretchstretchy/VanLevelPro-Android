@@ -11,10 +11,12 @@ import androidx.compose.ui.unit.dp
 import com.vanlevelpro.app.R
 import com.vanlevelpro.app.ui.components.gauges.CaravanGauge
 import kotlin.math.abs
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(
+fun CaravanDashboard(
     status: String,
     pitch: Float,
     roll: Float,
@@ -29,42 +31,15 @@ fun MainScreen(
         abs(pitch) < 0.5f &&
                 abs(roll) < 0.5f
 
-    Scaffold(
 
-        topBar = {
-
-            CenterAlignedTopAppBar(
-
-                title = {
-
-                    Text(
-                        "VanLevel Pro",
-                        fontWeight = FontWeight.Bold
-                    )
-                },
-
-                actions = {
-
-                    Text(
-                        if (connected) "🟢" else "⚪",
-                        style = MaterialTheme.typography.titleLarge
-                    )
-
-                    Spacer(Modifier.width(12.dp))
-                }
-            )
-        }
-
-    ) { padding ->
 
         Column(
-
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp),
-
             horizontalAlignment = Alignment.CenterHorizontally
+
 
         ) {
 
@@ -109,7 +84,7 @@ fun MainScreen(
             CaravanGauge(
                 angle = pitch,
                 imageRes = R.drawable.caravan_side,
-                modifier = Modifier.size(370.dp)
+                modifier = Modifier.size(300.dp)
             )
 
 
@@ -129,4 +104,3 @@ fun MainScreen(
             Spacer(Modifier.height(20.dp))
         }
     }
-}
