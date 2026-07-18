@@ -3,6 +3,7 @@ package com.vanlevelpro.app
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -20,25 +21,64 @@ class MainActivity : ComponentActivity() {
     private val permissionLauncher =
         registerForActivityResult(
             ActivityResultContracts.RequestMultiplePermissions()
-        ) { }
+        ) { permissions ->
+
+            val allGranted = permissions.values.all { it }
+
+            if (allGranted) {
+                Log.e("TEST", "Permissions Granted - Starting Scan")
+                viewModel.scan()
+            } else {
+                Log.e("TEST", "Permissions Denied")
+            }
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        Log.e("TEST", "MainActivity onCreate")
+
         enableEdgeToEdge()
 
-        requestPermissions()
-
-        viewModel.scan()
-
         setContent {
-
             VanLevelProTheme {
-
-                DrawerMenu()
-
+                DrawerMenu(viewModel)
             }
         }
+
+        requestPermissions()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        Log.e("TEST", "MainActivity onStart")
+    }
+
+    override fun onResume() {
+        super.onResume()
+        Log.e("TEST", "MainActivity onResume")
+    }
+
+    override fun onPause() {
+        Log.e("TEST", "MainActivity onPause")
+        super.onPause()
+    }
+
+    override fun onStop() {
+
+        Log.e("TEST", "MainActivity onStop")
+
+        // Disconnect HERE instead of onDestroy()
+        viewModel.disconnect()
+
+        super.onStop()
+    }
+
+    override fun onDestroy() {
+
+        Log.e("TEST", "MainActivity onDestroy")
+
+        super.onDestroy()
     }
 
     private fun requestPermissions() {
@@ -72,10 +112,17 @@ class MainActivity : ComponentActivity() {
             permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
         }
 
-        if (permissions.isNotEmpty()) {
+        if (permissions.isEmpty()) {
+
+            Log.e("TEST", "Permissions Already Granted - Starting Scan")
+            viewModel.scan()
+
+        } else {
+
             permissionLauncher.launch(
                 permissions.toTypedArray()
             )
+
         }
     }
 }

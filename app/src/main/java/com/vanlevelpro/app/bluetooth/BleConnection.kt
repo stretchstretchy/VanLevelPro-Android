@@ -20,7 +20,8 @@ class BleConnection(
 ) {
 
     companion object {
-        private const val TAG = "VanLevelBLE"
+
+        private const val TAG = "TEST"
 
         private val CCCD_UUID =
             UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
@@ -28,8 +29,57 @@ class BleConnection(
 
     private var gatt: BluetoothGatt? = null
 
+    private var disconnectRequested = false
+
+    private var commandCharacteristic: BluetoothGattCharacteristic? = null
+
+    @Suppress("DEPRECATION")
+    @SuppressLint("MissingPermission")
+    fun writeCommand(json: String): Boolean {
+
+        val characteristic = commandCharacteristic
+        val g = gatt
+
+        if (characteristic == null) {
+            Log.e(TAG, "writeCommand() aborted - commandCharacteristic is null")
+            return false
+        }
+
+        if (g == null) {
+            Log.e(TAG, "writeCommand() aborted - gatt is null")
+            return false
+        }
+
+        val data = json.toByteArray(Charsets.UTF_8)
+
+        return try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                val status = g.writeCharacteristic(
+                    characteristic,
+                    data,
+                    BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                )
+                Log.e(TAG, "writeCommand() status=$status")
+                status == android.bluetooth.BluetoothStatusCodes.SUCCESS
+            } else {
+                characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                characteristic.value = data
+                val ok = g.writeCharacteristic(characteristic)
+                Log.e(TAG, "writeCommand() legacy result=$ok")
+                ok
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "writeCommand() failed", e)
+            false
+        }
+    }
+
     @SuppressLint("MissingPermission")
     fun connect() {
+
+        Log.e(TAG, "connectGatt()")
+
+        disconnectRequested = false
 
         onStatus("Connecting...")
 
@@ -43,9 +93,14 @@ class BleConnection(
     @SuppressLint("MissingPermission")
     fun disconnect() {
 
+        Log.e(TAG, "disconnect() called")
+
+        disconnectRequested = true
+
         gatt?.disconnect()
-        gatt?.close()
-        gatt = null
+        // IMPORTANT:
+        // DO NOT close() here.
+        // Wait until STATE_DISCONNECTED.
     }
 
     private val callback = object : BluetoothGattCallback() {
@@ -57,20 +112,40 @@ class BleConnection(
             newState: Int
         ) {
 
+            Log.e(
+                TAG,
+                "onConnectionStateChange status=$status newState=$newState"
+            )
+
             when (newState) {
 
                 BluetoothProfile.STATE_CONNECTED -> {
 
                     onStatus("Connected")
 
-                    Log.d(TAG, "Requesting MTU 247")
+                    Log.e(TAG, "Requesting MTU")
 
                     gatt.requestMtu(247)
                 }
 
                 BluetoothProfile.STATE_DISCONNECTED -> {
 
+                    Log.e(TAG, "STATE_DISCONNECTED")
+
                     onStatus("Disconnected")
+
+                    try {
+                        gatt.close()
+                        Log.e(TAG, "Gatt closed")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "close() failed", e)
+                    }
+
+                    if (this@BleConnection.gatt === gatt) {
+                        this@BleConnection.gatt = null
+                    }
+
+                    commandCharacteristic = null
                 }
             }
         }
@@ -82,9 +157,7 @@ class BleConnection(
             status: Int
         ) {
 
-            Log.d(TAG, "MTU = $mtu")
-
-            onStatus("MTU $mtu")
+            Log.e(TAG, "MTU=$mtu")
 
             gatt.discoverServices()
         }
@@ -95,16 +168,19 @@ class BleConnection(
             status: Int
         ) {
 
+            Log.e(TAG, "Services discovered status=$status")
+
             if (status != BluetoothGatt.GATT_SUCCESS) {
 
                 onStatus("Service Discovery Failed")
                 return
             }
 
-            val service =
-                gatt.getService(BleUuids.SERVICE_UUID)
+            val service = gatt.getService(BleUuids.SERVICE_UUID)
 
             if (service == null) {
+
+                Log.e(TAG, "Service missing")
 
                 onStatus("VanLevel Service Missing")
                 return
@@ -115,8 +191,17 @@ class BleConnection(
 
             if (telemetryCharacteristic == null) {
 
+                Log.e(TAG, "Telemetry characteristic missing")
+
                 onStatus("Telemetry Characteristic Missing")
                 return
+            }
+
+            commandCharacteristic =
+                service.getCharacteristic(BleUuids.COMMAND_UUID)
+
+            if (commandCharacteristic == null) {
+                Log.e(TAG, "Command characteristic missing (heartbeat pings will not work)")
             }
 
             val descriptor =
@@ -124,9 +209,13 @@ class BleConnection(
 
             if (descriptor == null) {
 
+                Log.e(TAG, "CCCD missing")
+
                 onStatus("CCCD Missing")
                 return
             }
+
+            Log.e(TAG, "Enabling notifications")
 
             gatt.setCharacteristicNotification(
                 telemetryCharacteristic,
@@ -145,12 +234,11 @@ class BleConnection(
             status: Int
         ) {
 
+            Log.e(TAG, "Descriptor write status=$status")
+
             if (status == BluetoothGatt.GATT_SUCCESS) {
-
                 onStatus("Notifications Enabled")
-
             } else {
-
                 onStatus("Failed To Enable Notifications")
             }
         }
@@ -163,7 +251,7 @@ class BleConnection(
 
             val json = String(value, Charsets.UTF_8)
 
-            Log.d(TAG, "RX (${value.size} bytes): $json")
+            Log.e(TAG, "RX: $json")
 
             onTelemetry(json)
         }
@@ -177,17 +265,9 @@ class BleConnection(
 
             val json = String(value, Charsets.UTF_8)
 
-            Log.d(TAG, "RX (${value.size} bytes): $json")
+            Log.e(TAG, "RX: $json")
 
             onTelemetry(json)
-        }
-
-        override fun onCharacteristicRead(
-            gatt: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic,
-            status: Int
-        ) {
-            // Not used
         }
     }
 }

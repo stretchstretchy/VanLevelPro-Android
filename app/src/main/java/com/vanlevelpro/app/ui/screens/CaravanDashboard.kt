@@ -11,8 +11,6 @@ import androidx.compose.ui.unit.dp
 import com.vanlevelpro.app.R
 import com.vanlevelpro.app.ui.components.gauges.CaravanGauge
 import kotlin.math.abs
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -20,7 +18,9 @@ fun CaravanDashboard(
     status: String,
     pitch: Float,
     roll: Float,
-    onScan: () -> Unit
+    onScan: () -> Unit,
+    greenThreshold: Float = 0.5f,
+    yellowThreshold: Float = 2.0f
 ) {
 
     val connected =
@@ -28,79 +28,71 @@ fun CaravanDashboard(
                 status.contains("Notification", true)
 
     val level =
-        abs(pitch) < 0.5f &&
-                abs(roll) < 0.5f
+        abs(pitch) < greenThreshold &&
+                abs(roll) < greenThreshold
 
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
 
+        Text(
+            "FRONT",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
 
-        Column(
+        Spacer(Modifier.height(4.dp))
+
+        CaravanGauge(
+            angle = roll,
+            imageRes = R.drawable.caravan_front,
             modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .weight(1f)
+                .fillMaxWidth(),
+            tolerance = greenThreshold,
+            warningThreshold = yellowThreshold
+        )
 
+        Spacer(Modifier.height(12.dp))
 
-        ) {
+        HorizontalDivider()
 
-            Text(
-                "FRONT",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+        Spacer(Modifier.height(12.dp))
 
-            Spacer(Modifier.height(12.dp))
+        Text(
+            "SIDE",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
 
-            Text(
-                text = "Pitch: ${"%.1f".format(pitch)}°",
-                style = MaterialTheme.typography.bodyLarge
-            )
+        Spacer(Modifier.height(4.dp))
 
-            Text(
-                text = "Roll: ${"%.1f".format(roll)}°",
-                style = MaterialTheme.typography.bodyLarge
-            )
+        CaravanGauge(
+            angle = pitch,
+            imageRes = R.drawable.caravan_side,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            tolerance = greenThreshold,
+            warningThreshold = yellowThreshold,
+            invertImageRotation = true
+        )
 
-            CaravanGauge(
-                angle = roll,
-                imageRes = R.drawable.caravan_front,
-                modifier = Modifier.size(300.dp)
-            )
+        Spacer(Modifier.height(8.dp))
 
-            Spacer(Modifier.height(24.dp))
-
-            HorizontalDivider()
-
-            Spacer(Modifier.height(24.dp))
-
-            Text(
-                "SIDE",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-
-            Spacer(Modifier.height(12.dp))
-
-            CaravanGauge(
-                angle = pitch,
-                imageRes = R.drawable.caravan_side,
-                modifier = Modifier.size(300.dp)
-            )
-
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            Text(
-                text = if (level) "LEVEL" else "LEVELLING",
-                color =
-                    if (level)
-                        Color(0xFF4CAF50)
-                    else
-                        Color(0xFFFFB300),
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
-
-            Spacer(Modifier.height(20.dp))
-        }
+        Text(
+            text = if (level) "LEVEL" else "LEVELLING",
+            color =
+                if (level)
+                    Color(0xFF4CAF50)
+                else
+                    Color(0xFFFFB300),
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
     }
+}

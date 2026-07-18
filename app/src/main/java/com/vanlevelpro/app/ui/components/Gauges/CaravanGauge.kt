@@ -7,15 +7,21 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlin.math.cos
 import kotlin.math.sin
 import androidx.compose.animation.animateColorAsState
@@ -29,7 +35,9 @@ fun CaravanGauge(
     angle: Float,
     imageRes: Int,
     modifier: Modifier = Modifier,
-    tolerance: Float = 0.5f
+    tolerance: Float = 0.5f,
+    warningThreshold: Float = 2.0f,
+    invertImageRotation: Boolean = false
 ) {
     val animatedAngle by animateFloatAsState(
         targetValue = angle.coerceIn(-30f, 30f),
@@ -43,11 +51,25 @@ fun CaravanGauge(
     val pointerColour by animateColorAsState(
         targetValue = when {
             kotlin.math.abs(angle) <= tolerance -> Color(0xFF4CAF50)
-            kotlin.math.abs(angle) <= 2f -> Color(0xFFFFB300)
+            kotlin.math.abs(angle) <= warningThreshold -> Color(0xFFFFB300)
             else -> Color(0xFFE53935)
         },
         label = "PointerColour"
     )
+
+    val density = LocalDensity.current
+
+    val valueTextSizePx = with(density) { 15.sp.toPx() }
+
+    // Reused Paint instance for drawing the pitch/roll value next to the
+    // pointer tip - created once, colour/size updated per-frame below.
+    val valuePaint = remember {
+        android.graphics.Paint().apply {
+            isAntiAlias = true
+            textAlign = android.graphics.Paint.Align.CENTER
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+        }
+    }
 
     Box(
 
@@ -117,7 +139,6 @@ fun CaravanGauge(
                 center.y + sin(pointerAngle).toFloat() * (radius + 4.dp.toPx())
             )
 
-            val triangleLength = 20.dp.toPx()
             val triangleWidth = 7.dp.toPx()
 
             val angleRad = pointerAngle.toFloat()
@@ -162,17 +183,48 @@ fun CaravanGauge(
                 },
                 color = pointerColour
             )
-        }
 
-            Image(
-                painter = painterResource(imageRes),
-                contentDescription = null,
-                modifier = if (imageRes == com.vanlevelpro.app.R.drawable.caravan_side) {
-                    Modifier.size(width = 230.dp, height = 190.dp)
-                } else {
-                    Modifier.size(200.dp)
-                },
-                contentScale = ContentScale.Fit
+            // -------------------------------------------------
+            // Value label, positioned just beyond the pointer tip
+            // -------------------------------------------------
+
+            val labelPos = Offset(
+                center.x + cos(pointerAngle).toFloat() * (radius + 46.dp.toPx()),
+                center.y + sin(pointerAngle).toFloat() * (radius + 46.dp.toPx())
+            )
+
+            valuePaint.color = pointerColour.toArgb()
+            valuePaint.textSize = valueTextSizePx
+
+            drawContext.canvas.nativeCanvas.drawText(
+                "${"%.1f".format(angle)}°",
+                labelPos.x,
+                // Nudge down by ~1/3 of text height so it's vertically
+                // centred on labelPos rather than sitting above it.
+                labelPos.y + valueTextSizePx * 0.35f,
+                valuePaint
             )
         }
+
+        Image(
+            painter = painterResource(imageRes),
+            contentDescription = null,
+            modifier = (
+                    if (imageRes == com.vanlevelpro.app.R.drawable.caravan_side) {
+                        Modifier.size(width = 230.dp, height = 190.dp)
+                    } else {
+                        Modifier.size(200.dp)
+                    }
+                    ).graphicsLayer {
+                    // Tilt the van image itself in sync with the pointer,
+                    // at the real 1:1 angle (the pointer above is
+                    // deliberately exaggerated 2x around the dial for
+                    // readability, but the physical lean is the actual
+                    // angle value). Some views (e.g. side/pitch) need the
+                    // opposite rotation sense to look physically correct.
+                    rotationZ = if (invertImageRotation) -animatedAngle else animatedAngle
+                },
+            contentScale = ContentScale.Fit
+        )
     }
+}

@@ -18,19 +18,22 @@ import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.navigation.compose.rememberNavController
+import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import kotlinx.coroutines.launch
-import com.vanlevelpro.app.ui.screens.LevelScreen
+import androidx.navigation.compose.rememberNavController
 import com.vanlevelpro.app.ui.screens.CalibrationScreen
 import com.vanlevelpro.app.ui.screens.DiagnosticsScreen
+import com.vanlevelpro.app.ui.screens.LevelScreen
 import com.vanlevelpro.app.ui.screens.SettingsScreen
-import androidx.compose.ui.unit.dp
+import com.vanlevelpro.app.viewmodel.MainViewModel
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DrawerMenu() {
+fun DrawerMenu(
+    viewModel: MainViewModel
+) {
 
     val navController = rememberNavController()
 
@@ -142,7 +145,7 @@ fun DrawerMenu() {
                     actions = {
 
                         Text(
-                            "●",
+                            text = "●",
                             color = Color.Green,
                             modifier = Modifier.padding(end = 16.dp)
                         )
@@ -168,19 +171,19 @@ fun DrawerMenu() {
             ) {
 
                 composable(Screen.Level.route) {
-                    LevelScreen()
+                    LevelScreen(viewModel)
                 }
 
                 composable(Screen.Calibration.route) {
-                    CalibrationScreen()
+                    CalibrationScreen(viewModel)
                 }
 
                 composable(Screen.Diagnostics.route) {
-                    DiagnosticsScreen()
+                    DiagnosticsScreen(viewModel)
                 }
 
                 composable(Screen.Settings.route) {
-                    SettingsScreen()
+                    SettingsScreen(viewModel)
                 }
 
             }
