@@ -10,6 +10,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.core.content.ContextCompat
+import com.vanlevelpro.app.model.ConnectionState
 import com.vanlevelpro.app.navigation.DrawerMenu
 import com.vanlevelpro.app.ui.theme.VanLevelProTheme
 import com.vanlevelpro.app.viewmodel.MainViewModel
@@ -57,6 +58,36 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         Log.e("TEST", "MainActivity onResume")
+
+        // onStop() deliberately disconnects (e.g. when the screen times
+        // out and the activity is no longer visible). Nothing else was
+        // re-triggering a scan/reconnect on the way back - previously
+        // this only worked on a fresh app launch (onCreate), forcing a
+        // full force-stop-and-relaunch to reconnect. Re-scan here if
+        // we're not already connected/connecting/scanning, and only if
+        // permissions are actually granted (avoids racing the
+        // first-launch permission dialog).
+        if (
+            viewModel.connectionState.value == ConnectionState.DISCONNECTED &&
+            hasAllPermissions()
+        ) {
+            Log.e("TEST", "onResume - was disconnected, re-scanning")
+            viewModel.scan()
+        }
+    }
+
+    private fun hasAllPermissions(): Boolean {
+
+        val required = listOf(
+            Manifest.permission.BLUETOOTH_SCAN,
+            Manifest.permission.BLUETOOTH_CONNECT,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        )
+
+        return required.all {
+            ContextCompat.checkSelfPermission(this, it) ==
+                    PackageManager.PERMISSION_GRANTED
+        }
     }
 
     override fun onPause() {
@@ -83,41 +114,18 @@ class MainActivity : ComponentActivity() {
 
     private fun requestPermissions() {
 
-        val permissions = mutableListOf<String>()
-
-        if (
-            ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.BLUETOOTH_SCAN
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            permissions.add(Manifest.permission.BLUETOOTH_SCAN)
-        }
-
-        if (
-            ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.BLUETOOTH_CONNECT
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            permissions.add(Manifest.permission.BLUETOOTH_CONNECT)
-        }
-
-        if (
-            ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
-        }
-
-        if (permissions.isEmpty()) {
+        if (hasAllPermissions()) {
 
             Log.e("TEST", "Permissions Already Granted - Starting Scan")
             viewModel.scan()
 
         } else {
+
+            val permissions = mutableListOf(
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_CONNECT,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            )
 
             permissionLauncher.launch(
                 permissions.toTypedArray()

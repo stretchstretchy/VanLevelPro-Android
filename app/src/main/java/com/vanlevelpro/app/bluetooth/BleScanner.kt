@@ -56,8 +56,18 @@ class BleScanner(
 
             Log.d(TAG, "Found device: $name (${device.address}) RSSI=${result.rssi}")
 
+            // The OS-level ScanFilter already restricts results to our
+            // specific 128-bit service UUID, which is effectively
+            // collision-proof on its own. The device name is not always
+            // present in the primary advertising packet (it can end up
+            // in the scan response packet instead, or be missed in a
+            // given scan callback) - requiring an exact name match on
+            // top of the UUID filter has caused real connection
+            // failures where the correct device was found but rejected
+            // purely because its name didn't come through that cycle.
+            // Log it for visibility, but don't gate on it.
             if (name != BluetoothManager.DEVICE_NAME) {
-                return
+                Log.d(TAG, "Name did not match expected '${BluetoothManager.DEVICE_NAME}' - proceeding anyway (service UUID already matched)")
             }
 
             foundDevice = true

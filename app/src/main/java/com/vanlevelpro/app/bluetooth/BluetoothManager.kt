@@ -234,6 +234,8 @@ class BluetoothManager(private val context: Context) {
         _telemetry.value = Telemetry()
 
         _status.value = "Disconnected"
+
+        _connectionState.value = ConnectionState.DISCONNECTED
     }
 
     //--------------------------------------------------
