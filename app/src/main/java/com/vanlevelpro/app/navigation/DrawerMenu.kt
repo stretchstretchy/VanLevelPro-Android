@@ -19,9 +19,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.vanlevelpro.app.BuildConfig
+import com.vanlevelpro.app.model.ConnectionState
 import com.vanlevelpro.app.ui.screens.CalibrationScreen
 import com.vanlevelpro.app.ui.screens.DiagnosticsScreen
 import com.vanlevelpro.app.ui.screens.LevelScreen
@@ -46,6 +49,8 @@ fun DrawerMenu(
     var selected by remember {
         mutableStateOf(Screen.Level.route)
     }
+
+    val connectionState by viewModel.connectionState.collectAsState()
 
     ModalNavigationDrawer(
 
@@ -101,7 +106,7 @@ fun DrawerMenu(
                 )
 
                 Text(
-                    text = "Version 0.5",
+                    text = "Version ${BuildConfig.VERSION_NAME}",
                     modifier = Modifier.padding(20.dp)
                 )
             }
@@ -146,7 +151,13 @@ fun DrawerMenu(
 
                         Text(
                             text = "●",
-                            color = Color.Green,
+                            fontSize = 36.sp,
+                            color = when (connectionState) {
+                                ConnectionState.CONNECTED -> Color(0xFF4CAF50)
+                                ConnectionState.CONNECTING,
+                                ConnectionState.SCANNING -> Color(0xFFFFB300)
+                                ConnectionState.DISCONNECTED -> Color(0xFFE53935)
+                            },
                             modifier = Modifier.padding(end = 16.dp)
                         )
 

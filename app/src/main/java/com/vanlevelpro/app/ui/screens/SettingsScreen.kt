@@ -9,6 +9,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -17,6 +20,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -33,6 +39,8 @@ fun SettingsScreen(
     val greenThreshold by viewModel.greenThreshold.collectAsState()
 
     val yellowThreshold by viewModel.yellowThreshold.collectAsState()
+
+    var showForgetDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -157,5 +165,74 @@ fun SettingsScreen(
         ) {
             Text("Reset to Defaults (0.5° / 2.0°)")
         }
+
+        Spacer(Modifier.height(32.dp))
+
+        HorizontalDivider()
+
+        Spacer(Modifier.height(24.dp))
+
+        Text(
+            "Connection",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        Text(
+            text = "The app remembers your VanLevel Pro unit and " +
+                    "reconnects to it directly each time. Forget it if " +
+                    "you're switching to a different unit (e.g. testing " +
+                    "someone else's board).",
+            style = MaterialTheme.typography.bodyMedium
+        )
+
+        Spacer(Modifier.height(16.dp))
+
+        Button(
+            onClick = { showForgetDialog = true },
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFFE53935)
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Forget This Device")
+        }
+    }
+
+    if (showForgetDialog) {
+
+        AlertDialog(
+            onDismissRequest = { showForgetDialog = false },
+            title = { Text("Forget this device?") },
+            text = {
+                Text(
+                    "The app will search for any nearby VanLevel Pro " +
+                            "unit next time you connect, instead of " +
+                            "reconnecting directly to this one."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.forgetDevice()
+                        showForgetDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFE53935)
+                    )
+                ) {
+                    Text("Forget")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { showForgetDialog = false }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }

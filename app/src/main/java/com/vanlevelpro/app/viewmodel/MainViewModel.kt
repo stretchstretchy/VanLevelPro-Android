@@ -52,6 +52,10 @@ class MainViewModel(
         bluetoothManager.calibrate()
     }
 
+    fun forgetDevice() {
+        bluetoothManager.forgetRememberedDevice()
+    }
+
     //--------------------------------------------------
     // Level thresholds (Settings screen)
     //--------------------------------------------------
