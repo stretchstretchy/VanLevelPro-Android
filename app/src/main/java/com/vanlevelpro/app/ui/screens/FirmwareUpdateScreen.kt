@@ -17,6 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -44,6 +45,17 @@ fun FirmwareUpdateScreen(
     val otaState by viewModel.otaState.collectAsState()
 
     val otaProgress by viewModel.otaProgress.collectAsState()
+
+    // Always re-check the device's actual version when this screen is
+    // visited (and whenever the connection state changes while it's
+    // visible) - rather than trusting a single request made at connect
+    // time, which has proven to occasionally race with the reconnect
+    // that follows an OTA reboot.
+    LaunchedEffect(connectionState) {
+        if (connectionState == ConnectionState.CONNECTED) {
+            viewModel.requestFirmwareVersion()
+        }
+    }
 
     Column(
         modifier = Modifier

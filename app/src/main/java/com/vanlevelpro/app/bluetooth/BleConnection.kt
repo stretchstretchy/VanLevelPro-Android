@@ -40,7 +40,26 @@ class BleConnection(
     @Volatile
     private var negotiatedMtu: Int = 23
 
-    fun getMtuPayloadSize(): Int = (negotiatedMtu - 3).coerceAtLeast(20)
+    fun getMtuPayloadSize(): Int =
+        (negotiatedMtu - 3).coerceIn(20, 512)
+
+    /**
+     * Asks Android to negotiate a shorter connection interval (more
+     * frequent connection events = higher throughput) for the duration
+     * of a bulk transfer like OTA. Android's default "balanced" priority
+     * favours battery life over speed - this is the standard, documented
+     * way to trade battery for throughput temporarily. Purely a request;
+     * the actual interval used is still up to both sides' BLE stacks.
+     */
+    @SuppressLint("MissingPermission")
+    fun setHighPriorityConnection(high: Boolean) {
+        gatt?.requestConnectionPriority(
+            if (high)
+                BluetoothGatt.CONNECTION_PRIORITY_HIGH
+            else
+                BluetoothGatt.CONNECTION_PRIORITY_BALANCED
+        )
+    }
 
     // OTA chunks are written WITH response (unlike the fire-and-forget
     // heartbeat/command writes) so each one can be confirmed before
@@ -87,6 +106,60 @@ class BleConnection(
             Log.e(TAG, "writeCommand() failed", e)
             false
         }
+    }
+
+    /**
+     * Fast path for OTA chunks - write WITHOUT response. Much higher
+     * throughput than writeOtaChunk() (no round-trip per chunk, many
+     * packets can be pipelined per connection interval), at the cost of
+     * not knowing per-chunk whether it actually arrived. Safe here
+     * specifically because the firmware does a strict total-byte-count
+     * check before finalizing anything (Ota::end()) - a dropped packet
+     * causes a clean failure at the end of the transfer, never a
+     * corrupted flash. Retries briefly if Android's internal write
+     * queue is temporarily full rather than treating that as a failure.
+     */
+    @SuppressLint("MissingPermission")
+    suspend fun writeOtaChunkFast(data: ByteArray): Boolean {
+
+        val characteristic = otaCharacteristic
+        val g = gatt
+
+        if (characteristic == null || g == null) {
+            Log.e(TAG, "writeOtaChunkFast() aborted - not ready")
+            return false
+        }
+
+        repeat(20) { attempt ->
+
+            val queued =
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    val status = g.writeCharacteristic(
+                        characteristic,
+                        data,
+                        BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+                    )
+                    status == android.bluetooth.BluetoothStatusCodes.SUCCESS
+                } else {
+                    @Suppress("DEPRECATION")
+                    run {
+                        characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+                        characteristic.value = data
+                        g.writeCharacteristic(characteristic)
+                    }
+                }
+
+            if (queued) return true
+
+            // Android's internal write queue is full - back off briefly
+            // and let it drain rather than treating this as a real
+            // failure. This is expected/normal at high throughput, not
+            // an error condition.
+            kotlinx.coroutines.delay(5)
+        }
+
+        Log.e(TAG, "writeOtaChunkFast() - queue never drained after 20 attempts")
+        return false
     }
 
     /**

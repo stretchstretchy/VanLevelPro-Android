@@ -324,6 +324,17 @@ class BluetoothManager(private val context: Context) {
                     _connectionState.value = ConnectionState.CONNECTED
                     startHeartbeat()
                     startRxWatchdog()
+                }
+
+                if (message == "Notifications Enabled") {
+                    // Only safe to request the device's version once
+                    // service discovery has actually finished and
+                    // commandCharacteristic is populated - "Connected"
+                    // fires much earlier (right when the raw link comes
+                    // up, before MTU negotiation/discovery), and a
+                    // request sent that early silently fails because
+                    // the characteristic isn't ready yet.
+                    requestFirmwareVersion()
 
                     directConnectTimeoutRunnable?.let {
                         directConnectHandler.removeCallbacks(it)
@@ -513,10 +524,53 @@ class BluetoothManager(private val context: Context) {
             return false
         }
 
+        return try {
+            performOtaUpdateInternal(conn, firmware)
+        } catch (e: Exception) {
+            Log.e("TEST", "performOtaUpdate() - unexpected exception", e)
+            _otaState.value = OtaState.FAILED
+            conn.setHighPriorityConnection(false)
+            startHeartbeat()
+            false
+        }
+    }
+
+    private suspend fun performOtaUpdateInternal(conn: BleConnection, firmware: ByteArray): Boolean {
+
         val totalSize = firmware.size
 
         _otaState.value = OtaState.STARTING
         _otaProgress.value = 0 to totalSize
+
+        // Heartbeat pings share the same command characteristic as
+        // ota_start/ota_end - Android's BLE stack only allows one
+        // outstanding write at a time, and a ping landing mid-flight
+        // during either of those has caused real write collisions.
+        // Pause it for the duration of the whole transfer; chunk
+        // writes themselves (on the separate OTA characteristic)
+        // already count as heartbeat activity on the firmware side, so
+        // this is safe even for a long transfer.
+        stopHeartbeat()
+
+        // Defensively clear any stuck in-progress state on the ESP32
+        // left over from a previous attempt that never completed
+        // cleanly (e.g. the app crashing mid-transfer before it could
+        // send ota_abort) - the firmware unconditionally resets its own
+        // state on this command, so it's always safe to send even if
+        // nothing was actually stuck.
+        send("{\"cmd\":\"ota_abort\"}")
+
+        // Give that write time to actually complete before issuing the
+        // next one - Android's BLE stack only allows one outstanding
+        // GATT write at a time, and sending these back-to-back with no
+        // gap hits the same collision this fix is meant to avoid.
+        kotlinx.coroutines.delay(300)
+
+        // Ask for a shorter connection interval for the duration of the
+        // transfer - meaningfully speeds up write-with-response
+        // throughput at the cost of battery, which is a fine trade for
+        // an occasional, deliberate firmware update.
+        conn.setHighPriorityConnection(true)
 
         //--------------------------------------------------
         // ota_start
@@ -533,6 +587,8 @@ class BluetoothManager(private val context: Context) {
             Log.e("TEST", "performOtaUpdate() - ota_start not acknowledged")
             otaStartAck = null
             _otaState.value = OtaState.FAILED
+            conn.setHighPriorityConnection(false)
+            startHeartbeat()
             return false
         }
 
@@ -544,23 +600,57 @@ class BluetoothManager(private val context: Context) {
 
         val chunkSize = conn.getMtuPayloadSize()
         var offset = 0
+        var chunkIndex = 0
 
         while (offset < totalSize) {
 
             val end = (offset + chunkSize).coerceAtMost(totalSize)
             val chunk = firmware.copyOfRange(offset, end)
 
-            val ok = conn.writeOtaChunk(chunk)
+            // Mostly send fast (no response) for throughput, but every
+            // 10th chunk use a confirmed write instead - this forces a
+            // real pause roughly every ~5KB so the firmware's actual
+            // flash-write speed (which varies a lot, especially at
+            // sector-erase boundaries) can genuinely catch up, rather
+            // than the app just blasting ahead of what it can process.
+            val useConfirmedWrite = (chunkIndex % 10 == 0)
+
+            var ok = false
+
+            for (attempt in 1..3) {
+
+                ok = if (useConfirmedWrite) {
+                    conn.writeOtaChunk(chunk)
+                } else {
+                    conn.writeOtaChunkFast(chunk)
+                }
+
+                if (ok) break
+
+                Log.e("TEST", "performOtaUpdate() - chunk at offset $offset failed (attempt $attempt/3), retrying")
+                kotlinx.coroutines.delay(200)
+            }
 
             if (!ok) {
-                Log.e("TEST", "performOtaUpdate() - chunk write failed at offset $offset")
+                Log.e("TEST", "performOtaUpdate() - chunk write failed at offset $offset after 3 attempts")
                 send("{\"cmd\":\"ota_abort\"}")
                 _otaState.value = OtaState.FAILED
+                conn.setHighPriorityConnection(false)
+                startHeartbeat()
                 return false
             }
 
             offset = end
+            chunkIndex++
             _otaProgress.value = offset to totalSize
+
+            // Small courtesy delay on the fast chunks - flash writes on
+            // the ESP32 side take real time, and without per-chunk
+            // confirmation there's nothing else pacing us to its actual
+            // write speed between the periodic confirmed syncs above.
+            if (!useConfirmedWrite) {
+                kotlinx.coroutines.delay(2)
+            }
         }
 
         //--------------------------------------------------
@@ -583,10 +673,18 @@ class BluetoothManager(private val context: Context) {
 
         _otaState.value = if (completed) OtaState.SUCCESS else OtaState.FAILED
 
+        conn.setHighPriorityConnection(false)
+
         if (completed) {
             Log.e("TEST", "performOtaUpdate() - complete, device should now be rebooting")
+            // Device is about to reboot on its own and the link will
+            // drop shortly - no need to restart the heartbeat here.
         } else {
             Log.e("TEST", "performOtaUpdate() - ota_end not acknowledged")
+            // Update failed but the connection is still alive - restart
+            // the heartbeat so the ghosted-connection watchdogs (both
+            // directions) keep working normally again.
+            startHeartbeat()
         }
 
         return completed
