@@ -1,12 +1,6 @@
 package com.vanlevelpro.app.viewmodel
 
 import android.app.Application
-import android.app.DownloadManager
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.vanlevelpro.app.bluetooth.BluetoothManager
@@ -119,31 +113,6 @@ class MainViewModel(
 
     private var activeDownloadId: Long? = null
 
-    private val downloadCompleteReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-
-            val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
-
-            if (id == activeDownloadId) {
-                _updateStatus.value = UpdateStatus.READY_TO_INSTALL
-            }
-        }
-    }
-
-    init {
-        ContextCompat.registerReceiver(
-            appContext,
-            downloadCompleteReceiver,
-            IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
-            ContextCompat.RECEIVER_NOT_EXPORTED
-        )
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        appContext.unregisterReceiver(downloadCompleteReceiver)
-    }
-
     fun checkForUpdates() {
 
         _updateStatus.value = UpdateStatus.CHECKING
@@ -176,7 +145,16 @@ class MainViewModel(
 
         _updateStatus.value = UpdateStatus.DOWNLOADING
 
-        activeDownloadId = UpdateChecker.downloadUpdate(appContext, update.apkDownloadUrl)
+        val id = UpdateChecker.downloadUpdate(appContext, update.apkDownloadUrl)
+        activeDownloadId = id
+
+        viewModelScope.launch {
+
+            val success = UpdateChecker.awaitDownloadCompletion(appContext, id)
+
+            _updateStatus.value =
+                if (success) UpdateStatus.READY_TO_INSTALL else UpdateStatus.FAILED
+        }
     }
 
     fun installUpdate() {

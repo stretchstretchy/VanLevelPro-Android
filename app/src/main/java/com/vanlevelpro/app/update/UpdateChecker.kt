@@ -172,6 +172,51 @@ object UpdateChecker {
     }
 
     /**
+     * Polls DownloadManager directly for the given download's status
+     * instead of relying on the ACTION_DOWNLOAD_COMPLETE broadcast,
+     * which has proven unreliable in the field (seen not firing at all
+     * on some Samsung devices, even though the download itself
+     * genuinely completed and the system notification confirmed it).
+     * Returns true once successful, false if it fails or is cancelled.
+     */
+    suspend fun awaitDownloadCompletion(context: Context, downloadId: Long): Boolean =
+        withContext(Dispatchers.IO) {
+
+            val downloadManager =
+                context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+
+            val maxWaitMs = 5 * 60_000L
+            val pollIntervalMs = 500L
+            var waited = 0L
+
+            while (waited < maxWaitMs) {
+
+                val query = DownloadManager.Query().setFilterById(downloadId)
+                val cursor = downloadManager.query(query)
+
+                cursor.use {
+                    if (it.moveToFirst()) {
+
+                        val statusIndex = it.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                        val status = it.getInt(statusIndex)
+
+                        when (status) {
+                            DownloadManager.STATUS_SUCCESSFUL -> return@withContext true
+                            DownloadManager.STATUS_FAILED -> return@withContext false
+                        }
+                        // else: PENDING/RUNNING/PAUSED - keep polling
+                    }
+                }
+
+                kotlinx.coroutines.delay(pollIntervalMs)
+                waited += pollIntervalMs
+            }
+
+            Log.e(TAG, "awaitDownloadCompletion: timed out waiting for download $downloadId")
+            false
+        }
+
+    /**
      * Launches the system package installer for the already-downloaded
      * APK. Requires the user to have allowed "install unknown apps" for
      * this app (same prompt as any sideloaded APK) - Android shows that
