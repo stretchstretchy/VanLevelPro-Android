@@ -3,7 +3,7 @@ package com.vanlevelpro.app.update
 import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
+import androidx.core.net.toUri
 import android.os.Environment
 import android.util.Log
 import androidx.core.content.FileProvider
@@ -32,13 +32,18 @@ object UpdateChecker {
     private const val APK_FILENAME = "vanlevelpro_update.apk"
 
     /**
-     * Hits GitHub's Releases API for the latest published release.
-     * Returns null if there's no update available, or if the check
-     * fails for any reason (network error, no APK attached, etc.) -
-     * callers should treat null as "nothing to report", not an error
-     * the user needs to see.
+     * Result of a check: either an update is available, we're
+     * confirmed up to date, or the check itself failed (network error,
+     * bad response, etc.) - these are NOT the same thing, and callers
+     * must not treat a failure as "up to date".
      */
-    suspend fun checkForUpdate(): UpdateInfo? = withContext(Dispatchers.IO) {
+    sealed class CheckResult {
+        data class UpdateAvailable(val info: UpdateInfo) : CheckResult()
+        object UpToDate : CheckResult()
+        object CheckFailed : CheckResult()
+    }
+
+    suspend fun checkForUpdate(): CheckResult = withContext(Dispatchers.IO) {
 
         try {
 
@@ -52,7 +57,7 @@ object UpdateChecker {
 
             if (responseCode != HttpURLConnection.HTTP_OK) {
                 Log.e(TAG, "UpdateChecker: GitHub API returned $responseCode")
-                return@withContext null
+                return@withContext CheckResult.CheckFailed
             }
 
             val body = connection.inputStream.bufferedReader().use { it.readText() }
@@ -64,44 +69,47 @@ object UpdateChecker {
 
             if (tagName.isEmpty()) {
                 Log.e(TAG, "UpdateChecker: no tag_name in response")
-                return@withContext null
+                return@withContext CheckResult.CheckFailed
             }
 
             val assets = json.optJSONArray("assets")
-            var apkUrl: String? = null
+            var apkUrl = ""
 
             if (assets != null) {
                 for (i in 0 until assets.length()) {
                     val asset = assets.getJSONObject(i)
                     val name = asset.optString("name", "")
                     if (name.endsWith(".apk")) {
-                        apkUrl = asset.optString("browser_download_url", null)
+                        apkUrl = asset.optString("browser_download_url", "")
                         break
                     }
                 }
             }
 
-            if (apkUrl == null) {
+            if (apkUrl.isEmpty()) {
                 Log.e(TAG, "UpdateChecker: release '$tagName' has no .apk asset attached")
-                return@withContext null
+                return@withContext CheckResult.CheckFailed
             }
 
+            Log.e(TAG, "UpdateChecker: latest release is $tagName, current is ${BuildConfig.VERSION_NAME}")
+
             if (!isNewerVersion(tagName, BuildConfig.VERSION_NAME)) {
-                Log.e(TAG, "UpdateChecker: already up to date ($tagName vs current ${BuildConfig.VERSION_NAME})")
-                return@withContext null
+                return@withContext CheckResult.UpToDate
             }
 
             Log.e(TAG, "UpdateChecker: update available -> $tagName")
 
-            UpdateInfo(
-                versionTag = tagName,
-                apkDownloadUrl = apkUrl,
-                releaseNotes = releaseNotes
+            CheckResult.UpdateAvailable(
+                UpdateInfo(
+                    versionTag = tagName,
+                    apkDownloadUrl = apkUrl,
+                    releaseNotes = releaseNotes
+                )
             )
 
         } catch (e: Exception) {
             Log.e(TAG, "UpdateChecker: check failed", e)
-            null
+            CheckResult.CheckFailed
         }
     }
 
@@ -146,7 +154,7 @@ object UpdateChecker {
         // Clear out any previous partial/stale download of the same name.
         getDownloadedApkFile(context).delete()
 
-        val request = DownloadManager.Request(Uri.parse(apkUrl))
+        val request = DownloadManager.Request(apkUrl.toUri())
             .setTitle("VanLevel Pro Update")
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             .setDestinationInExternalFilesDir(

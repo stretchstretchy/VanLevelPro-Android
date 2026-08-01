@@ -150,14 +150,22 @@ class MainViewModel(
 
         viewModelScope.launch {
 
-            val result = UpdateChecker.checkForUpdate()
+            when (val result = UpdateChecker.checkForUpdate()) {
 
-            if (result != null) {
-                _availableUpdate.value = result
-                _updateStatus.value = UpdateStatus.AVAILABLE
-            } else {
-                _availableUpdate.value = null
-                _updateStatus.value = UpdateStatus.UP_TO_DATE
+                is UpdateChecker.CheckResult.UpdateAvailable -> {
+                    _availableUpdate.value = result.info
+                    _updateStatus.value = UpdateStatus.AVAILABLE
+                }
+
+                is UpdateChecker.CheckResult.UpToDate -> {
+                    _availableUpdate.value = null
+                    _updateStatus.value = UpdateStatus.UP_TO_DATE
+                }
+
+                is UpdateChecker.CheckResult.CheckFailed -> {
+                    _availableUpdate.value = null
+                    _updateStatus.value = UpdateStatus.FAILED
+                }
             }
         }
     }

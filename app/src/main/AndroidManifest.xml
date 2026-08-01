@@ -11,6 +11,7 @@
 
     <!-- TEMPORARY: Diagnostic step -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <!-- App updates: checking GitHub Releases and installing the downloaded APK -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -35,7 +36,6 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:label="@string/app_name"
             android:theme="@style/Theme.VanLevelPro">
 
             <intent-filter>
