@@ -9,9 +9,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -40,11 +43,16 @@ fun SettingsScreen(
 
     val yellowThreshold by viewModel.yellowThreshold.collectAsState()
 
+    val updateStatus by viewModel.updateStatus.collectAsState()
+
+    val availableUpdate by viewModel.availableUpdate.collectAsState()
+
     var showForgetDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(24.dp)
     ) {
 
@@ -198,6 +206,124 @@ fun SettingsScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Forget This Device")
+        }
+
+        Spacer(Modifier.height(32.dp))
+
+        HorizontalDivider()
+
+        Spacer(Modifier.height(24.dp))
+
+        Text(
+            "Updates",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        Text(
+            text = "Current version: ${com.vanlevelpro.app.BuildConfig.VERSION_NAME}",
+            style = MaterialTheme.typography.bodyMedium
+        )
+
+        Spacer(Modifier.height(16.dp))
+
+        when (updateStatus) {
+
+            MainViewModel.UpdateStatus.IDLE -> {
+                OutlinedButton(
+                    onClick = { viewModel.checkForUpdates() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Check for Updates")
+                }
+            }
+
+            MainViewModel.UpdateStatus.CHECKING -> {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(modifier = Modifier.padding(end = 12.dp))
+                    Text("Checking for updates...")
+                }
+            }
+
+            MainViewModel.UpdateStatus.UP_TO_DATE -> {
+                Text(
+                    "You're on the latest version.",
+                    color = Color(0xFF4CAF50)
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedButton(
+                    onClick = { viewModel.checkForUpdates() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Check Again")
+                }
+            }
+
+            MainViewModel.UpdateStatus.AVAILABLE -> {
+
+                Text(
+                    text = "Update available: ${availableUpdate?.versionTag ?: ""}",
+                    color = Color(0xFFFFB300),
+                    fontWeight = FontWeight.Bold
+                )
+
+                if (!availableUpdate?.releaseNotes.isNullOrBlank()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = availableUpdate?.releaseNotes.orEmpty(),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                Button(
+                    onClick = { viewModel.downloadUpdate() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Download Update")
+                }
+            }
+
+            MainViewModel.UpdateStatus.DOWNLOADING -> {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(modifier = Modifier.padding(end = 12.dp))
+                    Text("Downloading update...")
+                }
+            }
+
+            MainViewModel.UpdateStatus.READY_TO_INSTALL -> {
+
+                Text(
+                    "Update downloaded.",
+                    color = Color(0xFF4CAF50)
+                )
+
+                Spacer(Modifier.height(12.dp))
+
+                Button(
+                    onClick = { viewModel.installUpdate() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Install Update")
+                }
+            }
+
+            MainViewModel.UpdateStatus.FAILED -> {
+                Text(
+                    "Update check failed - check your internet connection.",
+                    color = Color(0xFFE53935)
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedButton(
+                    onClick = { viewModel.checkForUpdates() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Try Again")
+                }
+            }
         }
     }
 
