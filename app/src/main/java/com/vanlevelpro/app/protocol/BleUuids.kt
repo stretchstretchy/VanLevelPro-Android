@@ -12,4 +12,7 @@ object BleUuids {
 
     val COMMAND_UUID =
         UUID.fromString("5b42c100-0003-4b5f-9999-112233445566")
+
+    val OTA_UUID =
+        UUID.fromString("5b42c100-0004-4b5f-9999-112233445566")
 }

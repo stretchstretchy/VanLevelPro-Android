@@ -33,6 +33,21 @@ class BleConnection(
 
     private var commandCharacteristic: BluetoothGattCharacteristic? = null
 
+    private var otaCharacteristic: BluetoothGattCharacteristic? = null
+
+    // Defaults to the BLE spec minimum until onMtuChanged actually
+    // reports the negotiated value.
+    @Volatile
+    private var negotiatedMtu: Int = 23
+
+    fun getMtuPayloadSize(): Int = (negotiatedMtu - 3).coerceAtLeast(20)
+
+    // OTA chunks are written WITH response (unlike the fire-and-forget
+    // heartbeat/command writes) so each one can be confirmed before
+    // sending the next - flooding the link with unconfirmed writes is
+    // a common source of silently dropped/corrupted OTA transfers.
+    private var pendingOtaWrite: kotlinx.coroutines.CompletableDeferred<Boolean>? = null
+
     @Suppress("DEPRECATION")
     @SuppressLint("MissingPermission")
     fun writeCommand(json: String): Boolean {
@@ -72,6 +87,71 @@ class BleConnection(
             Log.e(TAG, "writeCommand() failed", e)
             false
         }
+    }
+
+    /**
+     * Writes one chunk of firmware data during an OTA update, WITH
+     * response, suspending until the ESP32 actually confirms it (or
+     * the write fails / times out / the link drops). Unlike the
+     * fire-and-forget heartbeat/command writes, OTA chunks must be
+     * confirmed one at a time - sending them all at once without
+     * waiting is a common cause of silently dropped bytes corrupting
+     * the transfer.
+     */
+    @SuppressLint("MissingPermission")
+    suspend fun writeOtaChunk(data: ByteArray): Boolean {
+
+        val characteristic = otaCharacteristic
+        val g = gatt
+
+        if (characteristic == null) {
+            Log.e(TAG, "writeOtaChunk() aborted - otaCharacteristic is null")
+            return false
+        }
+
+        if (g == null) {
+            Log.e(TAG, "writeOtaChunk() aborted - gatt is null")
+            return false
+        }
+
+        val deferred = kotlinx.coroutines.CompletableDeferred<Boolean>()
+        pendingOtaWrite = deferred
+
+        val writeStarted =
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                g.writeCharacteristic(
+                    characteristic,
+                    data,
+                    BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                ) == android.bluetooth.BluetoothStatusCodes.SUCCESS
+            } else {
+                @Suppress("DEPRECATION")
+                run {
+                    characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                    characteristic.value = data
+                    g.writeCharacteristic(characteristic)
+                }
+            }
+
+        if (!writeStarted) {
+            Log.e(TAG, "writeOtaChunk() - write did not even start")
+            pendingOtaWrite = null
+            return false
+        }
+
+        // 5s is generous for a single chunk - if the link has genuinely
+        // gone quiet, the outer OTA loop should abort rather than hang.
+        val result = kotlinx.coroutines.withTimeoutOrNull(5000) {
+            deferred.await()
+        }
+
+        if (result == null) {
+            Log.e(TAG, "writeOtaChunk() timed out waiting for confirmation")
+            pendingOtaWrite = null
+            return false
+        }
+
+        return result
     }
 
     @SuppressLint("MissingPermission")
@@ -125,7 +205,11 @@ class BleConnection(
 
                     Log.e(TAG, "Requesting MTU")
 
-                    gatt.requestMtu(247)
+                    // Match the firmware's OTA_PREFERRED_MTU (517) so
+                    // OTA transfers get the largest chunks the link
+                    // supports. Regular telemetry/commands are tiny
+                    // and unaffected either way.
+                    gatt.requestMtu(517)
                 }
 
                 BluetoothProfile.STATE_DISCONNECTED -> {
@@ -146,6 +230,12 @@ class BleConnection(
                     }
 
                     commandCharacteristic = null
+                    otaCharacteristic = null
+
+                    // Don't leave an OTA chunk write hanging forever if
+                    // the link drops mid-transfer.
+                    pendingOtaWrite?.complete(false)
+                    pendingOtaWrite = null
                 }
             }
         }
@@ -158,6 +248,10 @@ class BleConnection(
         ) {
 
             Log.e(TAG, "MTU=$mtu")
+
+            // 3 bytes of ATT protocol overhead per packet - actual
+            // usable payload per write is mtu - 3.
+            negotiatedMtu = mtu
 
             gatt.discoverServices()
         }
@@ -204,6 +298,13 @@ class BleConnection(
                 Log.e(TAG, "Command characteristic missing (heartbeat pings will not work)")
             }
 
+            otaCharacteristic =
+                service.getCharacteristic(BleUuids.OTA_UUID)
+
+            if (otaCharacteristic == null) {
+                Log.e(TAG, "OTA characteristic missing (firmware updates will not work)")
+            }
+
             val descriptor =
                 telemetryCharacteristic.getDescriptor(CCCD_UUID)
 
@@ -240,6 +341,19 @@ class BleConnection(
                 onStatus("Notifications Enabled")
             } else {
                 onStatus("Failed To Enable Notifications")
+            }
+        }
+
+        @SuppressLint("MissingPermission")
+        override fun onCharacteristicWrite(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            status: Int
+        ) {
+
+            if (characteristic.uuid == BleUuids.OTA_UUID) {
+                pendingOtaWrite?.complete(status == BluetoothGatt.GATT_SUCCESS)
+                pendingOtaWrite = null
             }
         }
 
