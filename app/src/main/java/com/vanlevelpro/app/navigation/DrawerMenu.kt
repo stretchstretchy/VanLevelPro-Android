@@ -27,6 +27,7 @@ import com.vanlevelpro.app.BuildConfig
 import com.vanlevelpro.app.model.ConnectionState
 import com.vanlevelpro.app.ui.screens.CalibrationScreen
 import com.vanlevelpro.app.ui.screens.DiagnosticsScreen
+import com.vanlevelpro.app.ui.screens.FirmwareUpdateScreen
 import com.vanlevelpro.app.ui.screens.LevelScreen
 import com.vanlevelpro.app.ui.screens.SettingsScreen
 import com.vanlevelpro.app.viewmodel.MainViewModel
@@ -105,6 +106,16 @@ fun DrawerMenu(
                     }
                 )
 
+                NavigationDrawerItem(
+                    label = { Text("Firmware Update") },
+                    selected = selected == Screen.Firmware.route,
+                    onClick = {
+                        selected = Screen.Firmware.route
+                        navController.navigate(Screen.Firmware.route)
+                        scope.launch { drawerState.close() }
+                    }
+                )
+
                 Text(
                     text = "Version ${BuildConfig.VERSION_NAME}",
                     modifier = Modifier.padding(20.dp)
@@ -151,7 +162,7 @@ fun DrawerMenu(
 
                         Text(
                             text = "●",
-                            fontSize = 36.sp,
+                            fontSize = 22.sp,
                             color = when (connectionState) {
                                 ConnectionState.CONNECTED -> Color(0xFF4CAF50)
                                 ConnectionState.CONNECTING,
@@ -195,6 +206,10 @@ fun DrawerMenu(
 
                 composable(Screen.Settings.route) {
                     SettingsScreen(viewModel)
+                }
+
+                composable(Screen.Firmware.route) {
+                    FirmwareUpdateScreen(viewModel)
                 }
 
             }

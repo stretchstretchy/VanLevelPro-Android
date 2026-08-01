@@ -166,6 +166,16 @@ class BluetoothManager(private val context: Context) {
     val telemetry: StateFlow<Telemetry> =
         _telemetry.asStateFlow()
 
+    private val _deviceFirmwareVersion =
+        MutableStateFlow<String?>(null)
+
+    val deviceFirmwareVersion: StateFlow<String?> =
+        _deviceFirmwareVersion.asStateFlow()
+
+    fun requestFirmwareVersion() {
+        send("{\"cmd\":\"version\"}")
+    }
+
     //--------------------------------------------------
     // OTA firmware update
     //--------------------------------------------------
@@ -351,9 +361,12 @@ class BluetoothManager(private val context: Context) {
             when (obj.optString("type")) {
                 "telemetry" -> parseTelemetry(obj)
                 "ota_status" -> parseOtaStatus(obj)
-                // "hello"/"version"/"status"/"error" etc. are only ever
-                // sent in direct response to a command the app itself
-                // issued (e.g. Diagnostics requesting a status refresh)
+                "version" -> {
+                    val version = obj.optString("version", "")
+                    _deviceFirmwareVersion.value = version.ifEmpty { null }
+                }
+                // "hello"/"status"/"error" etc. are only ever sent in
+                // direct response to a command the app itself issued
                 // and aren't tracked as ongoing state here - callers
                 // read them directly off the raw `status` string.
             }

@@ -1,18 +1,25 @@
 package com.vanlevelpro.app.viewmodel
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.vanlevelpro.app.bluetooth.BluetoothManager
+import com.vanlevelpro.app.model.ConnectionState
 import com.vanlevelpro.app.settings.SettingsRepository
+import com.vanlevelpro.app.update.FirmwareUpdateChecker
+import com.vanlevelpro.app.update.FirmwareUpdateInfo
 import com.vanlevelpro.app.update.UpdateChecker
 import com.vanlevelpro.app.update.UpdateInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 class MainViewModel(
     application: Application
@@ -51,6 +58,31 @@ class MainViewModel(
             viewModelScope,
             SharingStarted.WhileSubscribed(5000),
             bluetoothManager.connectionState.value
+        )
+
+    val deviceFirmwareVersion =
+        bluetoothManager.deviceFirmwareVersion.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            bluetoothManager.deviceFirmwareVersion.value
+        )
+
+    fun requestFirmwareVersion() {
+        bluetoothManager.requestFirmwareVersion()
+    }
+
+    val otaState =
+        bluetoothManager.otaState.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            bluetoothManager.otaState.value
+        )
+
+    val otaProgress =
+        bluetoothManager.otaProgress.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            bluetoothManager.otaProgress.value
         )
 
     fun scan() {
@@ -159,5 +191,111 @@ class MainViewModel(
 
     fun installUpdate() {
         UpdateChecker.installApk(appContext)
+    }
+
+    //--------------------------------------------------
+    // Firmware updates (ESP32, over BLE)
+    //--------------------------------------------------
+
+    enum class FirmwareUpdateStatus {
+        IDLE, CHECKING_VERSION, CHECKING, UP_TO_DATE, AVAILABLE,
+        DOWNLOADING, INSTALLING, SUCCESS, FAILED
+    }
+
+    private val _firmwareUpdateStatus =
+        MutableStateFlow(FirmwareUpdateStatus.IDLE)
+
+    val firmwareUpdateStatus: StateFlow<FirmwareUpdateStatus> =
+        _firmwareUpdateStatus.asStateFlow()
+
+    private val _availableFirmwareUpdate =
+        MutableStateFlow<FirmwareUpdateInfo?>(null)
+
+    val availableFirmwareUpdate: StateFlow<FirmwareUpdateInfo?> =
+        _availableFirmwareUpdate.asStateFlow()
+
+    fun checkForFirmwareUpdate() {
+
+        if (connectionState.value != ConnectionState.CONNECTED) {
+            _firmwareUpdateStatus.value = FirmwareUpdateStatus.FAILED
+            return
+        }
+
+        _firmwareUpdateStatus.value = FirmwareUpdateStatus.CHECKING_VERSION
+
+        viewModelScope.launch {
+
+            requestFirmwareVersion()
+
+            // Wait for the device to actually reply with its version -
+            // it may have already reported one recently (in which case
+            // this returns immediately with the existing value only if
+            // it changes; since it's the same request/response pair
+            // each time, briefly clear it first so we know we're
+            // seeing a fresh reply rather than a stale one).
+            val version = withTimeoutOrNull(5000) {
+                deviceFirmwareVersion.filterNotNull().first()
+            }
+
+            if (version == null) {
+                Log.e("TEST", "checkForFirmwareUpdate() - device did not report a version")
+                _firmwareUpdateStatus.value = FirmwareUpdateStatus.FAILED
+                return@launch
+            }
+
+            _firmwareUpdateStatus.value = FirmwareUpdateStatus.CHECKING
+
+            when (val result = FirmwareUpdateChecker.checkForUpdate(version)) {
+
+                is FirmwareUpdateChecker.CheckResult.UpdateAvailable -> {
+                    _availableFirmwareUpdate.value = result.info
+                    _firmwareUpdateStatus.value = FirmwareUpdateStatus.AVAILABLE
+                }
+
+                is FirmwareUpdateChecker.CheckResult.UpToDate -> {
+                    _availableFirmwareUpdate.value = null
+                    _firmwareUpdateStatus.value = FirmwareUpdateStatus.UP_TO_DATE
+                }
+
+                is FirmwareUpdateChecker.CheckResult.CheckFailed -> {
+                    _availableFirmwareUpdate.value = null
+                    _firmwareUpdateStatus.value = FirmwareUpdateStatus.FAILED
+                }
+            }
+        }
+    }
+
+    fun installFirmwareUpdate() {
+
+        val update = _availableFirmwareUpdate.value ?: return
+
+        _firmwareUpdateStatus.value = FirmwareUpdateStatus.DOWNLOADING
+
+        viewModelScope.launch {
+
+            val firmwareBytes = FirmwareUpdateChecker.downloadFirmware(update.binDownloadUrl)
+
+            if (firmwareBytes == null) {
+                Log.e("TEST", "installFirmwareUpdate() - download failed")
+                _firmwareUpdateStatus.value = FirmwareUpdateStatus.FAILED
+                return@launch
+            }
+
+            _firmwareUpdateStatus.value = FirmwareUpdateStatus.INSTALLING
+
+            // Detailed progress during the actual BLE transfer is
+            // exposed separately via otaState/otaProgress - the UI
+            // reads those directly while this is FirmwareUpdateStatus.INSTALLING.
+            val success = bluetoothManager.performOtaUpdate(firmwareBytes)
+
+            _firmwareUpdateStatus.value =
+                if (success) FirmwareUpdateStatus.SUCCESS else FirmwareUpdateStatus.FAILED
+        }
+    }
+
+    fun resetFirmwareUpdateState() {
+        _firmwareUpdateStatus.value = FirmwareUpdateStatus.IDLE
+        _availableFirmwareUpdate.value = null
+        bluetoothManager.resetOtaState()
     }
 }

@@ -118,7 +118,7 @@ object UpdateChecker {
      * a plain string comparison would wrongly say 1.9 is newer). Tags
      * are expected as "v1.1" or "1.1"; a leading "v" is stripped.
      */
-    private fun isNewerVersion(remoteTag: String, currentVersion: String): Boolean {
+    internal fun isNewerVersion(remoteTag: String, currentVersion: String): Boolean {
 
         val remoteParts = remoteTag.removePrefix("v").removePrefix("V")
             .split(".").mapNotNull { it.toIntOrNull() }

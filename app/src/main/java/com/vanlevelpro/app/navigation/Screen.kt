@@ -24,4 +24,9 @@ sealed class Screen(
         route = "settings",
         title = "Settings"
     )
+
+    object Firmware : Screen(
+        route = "firmware",
+        title = "Firmware Update"
+    )
 }
